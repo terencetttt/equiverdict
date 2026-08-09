@@ -2,6 +2,10 @@
 
 EquiVerdict is an evidence-led freelance dispute resolution dApp that uses a GenLayer Intelligent Contract to evaluate submitted evidence and produce a transparent settlement recommendation.
 
+## Live Demo
+
+[Launch EquiVerdict](https://equiverdict.vercel.app)
+
 ## Overview
 
 EquiVerdict gives clients and freelancers a structured way to record a dispute, submit supporting evidence, and receive an on-chain verdict. The application presents the contract's decision, confidence score, suggested payment split, reasoning, and recommended next action in a clear case dashboard.
