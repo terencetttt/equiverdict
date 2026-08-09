@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trust & Justice Preview</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="logo">
+      <div class="seal">⚖️</div>
+      <div>
+        <h1>FairWork Verdict</h1>
+        <p>Justice for freelance agreements.</p>
+      </div>
+    </div>
+    <nav>
+      <a href="#dashboard">Dashboard</a>
+      <a href="#new-case">New case</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#decision">Decision</a>
+    </nav>
+  </header>
+
+  <main class="content">
+    <section id="dashboard" class="panel">
+      <div class="heading-row">
+        <div>
+          <p class="eyebrow">Dashboard</p>
+          <h2>Case portfolio</h2>
+        </div>
+        <button class="primary">Start review</button>
+      </div>
+      <div class="summary-row">
+        <div class="summary-card">
+          <p>Cases in progress</p>
+          <strong>8</strong>
+        </div>
+        <div class="summary-card">
+          <p>Resolved fairly</p>
+          <strong>15</strong>
+        </div>
+        <div class="summary-card">
+          <p>Average confidence</p>
+          <strong>81%</strong>
+        </div>
+      </div>
+      <div class="case-table">
+        <article class="case-entry">
+          <div>
+            <h3>Website redesign missed deadline</h3>
+            <p>Client alleges late delivery and missing mobile design assets.</p>
+          </div>
+          <span class="pill review">In review</span>
+        </article>
+        <article class="case-entry">
+          <div>
+            <h3>Mobile app feature incomplete</h3>
+            <p>Freelancer delivered limited functionality fewer than agreed.</p>
+          </div>
+          <span class="pill resolved">Resolved</span>
+        </article>
+        <article class="case-entry">
+          <div>
+            <h3>Logo scope mismatch</h3>
+            <p>Dispute over deliverable count and final asset handoff.</p>
+          </div>
+          <span class="pill pending">Pending</span>
+        </article>
+      </div>
+    </section>
+
+    <section id="new-case" class="panel soft-panel">
+      <div class="heading-row">
+        <div>
+          <p class="eyebrow">New dispute</p>
+          <h2>Submit key case facts</h2>
+        </div>
+      </div>
+      <div class="form-grid">
+        <label>
+          Case title
+          <input type="text" value="Website redesign missed deadline" readonly />
+        </label>
+        <label>
+          Category
+          <select disabled>
+            <option>Missed deadline</option>
+          </select>
+        </label>
+        <label class="full-width">
+          Summary
+          <textarea readonly>Client says the final site was delivered late and several design requirements remained incomplete.</textarea>
+        </label>
+      </div>
+    </section>
+
+    <section id="evidence" class="panel">
+      <div class="heading-row">
+        <div>
+          <p class="eyebrow">Evidence</p>
+          <h2>Document supporting proof</h2>
+        </div>
+      </div>
+      <div class="evidence-list">
+        <article class="evidence-item">
+          <div>
+            <span>Milestone</span>
+            <h4>Agreed delivery terms</h4>
+            <p>June 20th completion with final layout handoff and 3 revisions.</p>
+          </div>
+          <span class="badge document">Contract</span>
+        </article>
+        <article class="evidence-item">
+          <div>
+            <span>Chat</span>
+            <h4>Client feedback</h4>
+            <p>“The mobile layout is incomplete, and there is no final banner image.”</p>
+          </div>
+          <span class="badge highlight">Proof</span>
+        </article>
+        <article class="evidence-item">
+          <div>
+            <span>Screenshot</span>
+            <h4>Delivered preview</h4>
+            <p>Final upload shows missing responsive behaviour and absent assets.</p>
+          </div>
+          <span class="badge evidence">Preview</span>
+        </article>
+      </div>
+    </section>
+
+    <section id="decision" class="panel soft-panel">
+      <div class="heading-row">
+        <div>
+          <p class="eyebrow">Decision</p>
+          <h2>Verdict outcome</h2>
+        </div>
+      </div>
+      <div class="result-grid">
+        <article class="result-card client">
+          <p>Recommendation</p>
+          <h3>Favor client</h3>
+          <p>Partial refund due to delivery and scope gaps.</p>
+        </article>
+        <article class="result-card confidence">
+          <p>Confidence</p>
+          <strong>76%</strong>
+        </article>
+      </div>
+      <div class="reasoning">
+        <h3>Rationale</h3>
+        <ul>
+          <li>Delivery missed the milestone date.</li>
+          <li>Client evidence confirms missing mobile layout.</li>
+          <li>Agreed scope required responsive assets not present.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

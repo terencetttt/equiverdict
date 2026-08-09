@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Friendly Marketplace Preview</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">FW</div>
+      <div>
+        <h1>FairWork Verdict</h1>
+        <p>Helping marketplaces settle disputes with clarity.</p>
+      </div>
+    </div>
+    <nav>
+      <a href="#dashboard">Home</a>
+      <a href="#create">New dispute</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#summary">Summary</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    <section id="dashboard" class="hero-card">
+      <div>
+        <p class="eyebrow">Dashboard</p>
+        <h2>Dispute cases at a glance</h2>
+      </div>
+      <button class="button">Create dispute</button>
+    </section>
+
+    <section class="overview-grid">
+      <article class="metric-card">
+        <p>Open cases</p>
+        <strong>6</strong>
+      </article>
+      <article class="metric-card">
+        <p>Resolved</p>
+        <strong>13</strong>
+      </article>
+      <article class="metric-card">
+        <p>Avg. turnaround</p>
+        <strong>1.5 days</strong>
+      </article>
+    </section>
+
+    <section id="create" class="panel">
+      <div class="section-header">
+        <div>
+          <p class="eyebrow">Create dispute</p>
+          <h2>Tell us what happened</h2>
+        </div>
+      </div>
+      <div class="form-panel">
+        <label>
+          Title
+          <input type="text" value="Website redesign missed deadline" readonly />
+        </label>
+        <label>
+          Category
+          <select disabled>
+            <option>Missed deadline</option>
+          </select>
+        </label>
+        <label class="full-width">
+          Summary
+          <textarea readonly>Client says the website redesign was delivered late and key sections were missing when handed off.</textarea>
+        </label>
+      </div>
+    </section>
+
+    <section id="evidence" class="panel soft-panel">
+      <div class="section-header">
+        <div>
+          <p class="eyebrow">Evidence</p>
+          <h2>What the case includes</h2>
+        </div>
+      </div>
+      <div class="evidence-cards">
+        <article class="evidence-item">
+          <h4>Milestone agreement</h4>
+          <p>Completion date June 20th with final delivery and revisions included.</p>
+          <span class="chip">Contract</span>
+        </article>
+        <article class="evidence-item">
+          <h4>Chat excerpt</h4>
+          <p>“The mobile layout is still incomplete and the homepage banner is missing.”</p>
+          <span class="chip">Message</span>
+        </article>
+        <article class="evidence-item">
+          <h4>Preview screenshot</h4>
+          <p>Delivered files show missing responsive behaviour and absent graphics.</p>
+          <span class="chip">Proof</span>
+        </article>
+      </div>
+    </section>
+
+    <section id="summary" class="panel">
+      <div class="section-header">
+        <div>
+          <p class="eyebrow">Verdict</p>
+          <h2>Review result</h2>
+        </div>
+      </div>
+      <div class="summary-grid">
+        <div class="result-card">
+          <p class="status-tag">Favor client</p>
+          <h3>Partial refund</h3>
+          <p>The case shows delivery delays and missing agreed deliverables.</p>
+        </div>
+        <div class="next-step-card">
+          <p>Confidence</p>
+          <strong>76%</strong>
+          <p>Recommended action: issue a partial refund and request completion of the remaining assets.</p>
+        </div>
+      </div>
+      <div class="action-list">
+        <h4>Decision reasons</h4>
+        <ul>
+          <li>Delivery missed the agreed milestone date.</li>
+          <li>Client evidence shows missing mobile layout.</li>
+          <li>Final preview did not include completed assets.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

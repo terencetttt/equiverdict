@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design Preview Comparison</title>
+  <style>
+    :root {
+      font-family: Inter, system-ui, sans-serif;
+      background: #f7f9fc;
+      color: #111827;
+      line-height: 1.6;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #ffffff 0%, #f3f6fb 100%);
+    }
+    .page-shell {
+      width: min(1180px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 2.5rem 0 4rem;
+    }
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+    }
+    header h1 {
+      margin: 0;
+      font-size: clamp(2rem, 3vw, 3rem);
+    }
+    header p {
+      margin: 0;
+      color: #475569;
+      font-size: 1rem;
+    }
+    .grid {
+      display: grid;
+      gap: 1.5rem;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 1.25rem;
+      padding: 1.75rem;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+      display: grid;
+      gap: 1rem;
+    }
+    .card h2 {
+      margin: 0;
+      font-size: 1.35rem;
+    }
+    .card p {
+      margin: 0;
+      color: #475569;
+    }
+    .palette {
+      display: flex;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+    }
+    .swatch {
+      width: 38px;
+      height: 38px;
+      border-radius: 0.75rem;
+      border: 1px solid #cbd5e1;
+    }
+    .button-row {
+      display: flex;
+      justify-content: flex-end;
+    }
+    .preview-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.95rem 1.25rem;
+      border-radius: 999px;
+      border: none;
+      background: #2563eb;
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .preview-btn:hover {
+      background: #1d4ed8;
+    }
+    @media (max-width: 860px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page-shell">
+    <header>
+      <h1>Design Preview Comparison</h1>
+      <p>Review the four visual themes for FairWork Verdict and open any static preview.</p>
+    </header>
+
+    <div class="grid">
+      <article class="card">
+        <div>
+          <span style="display:inline-flex;padding:0.5rem 0.8rem;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:0.82rem;font-weight:700;">Clean Professional</span>
+          <h2>Calm, corporate, and polished.</h2>
+        </div>
+        <p>A minimal, modern interface built for clarity and trust. Ideal for users who want a professional dispute workflow with clean structure and an executive tone.</p>
+        <div class="palette">
+          <span class="swatch" style="background:#ffffff;"></span>
+          <span class="swatch" style="background:#1f2937;"></span>
+          <span class="swatch" style="background:#2563eb;"></span>
+          <span class="swatch" style="background:#dbeafe;"></span>
+          <span class="swatch" style="background:#64748b;"></span>
+        </div>
+        <div class="button-row">
+          <a class="preview-btn" href="clean-professional/index.html" target="_blank">Open preview</a>
+        </div>
+      </article>
+
+      <article class="card">
+        <div>
+          <span style="display:inline-flex;padding:0.5rem 0.8rem;border-radius:999px;background:#ecfeff;color:#047481;font-size:0.82rem;font-weight:700;">Futuristic Web3</span>
+          <h2>Glassy, neon, and modern.</h2>
+        </div>
+        <p>A bold Web3-inspired theme with glassmorphism, neon accents, and a dark digital feel. Great for projects that want a tech-forward, audit-ready aesthetic.</p>
+        <div class="palette">
+          <span class="swatch" style="background:#050816;"></span>
+          <span class="swatch" style="background:#22d3ee;"></span>
+          <span class="swatch" style="background:#a78bfa;"></span>
+          <span class="swatch" style="background:#0f172a;"></span>
+          <span class="swatch" style="background:#94a3b8;"></span>
+        </div>
+        <div class="button-row">
+          <a class="preview-btn" href="futuristic-web3/index.html" target="_blank">Open preview</a>
+        </div>
+      </article>
+
+      <article class="card">
+        <div>
+          <span style="display:inline-flex;padding:0.5rem 0.8rem;border-radius:999px;background:#fff1c2;color:#92400e;font-size:0.82rem;font-weight:700;">Trust & Justice</span>
+          <h2>Stately, legal, and authoritative.</h2>
+        </div>
+        <p>A refined design with traditional legal cues, serif typography, and confident validation. Best for audiences looking for a trust-first, formal dispute resolution brand.</p>
+        <div class="palette">
+          <span class="swatch" style="background:#f8f5f0;"></span>
+          <span class="swatch" style="background:#0f172a;"></span>
+          <span class="swatch" style="background:#b78b36;"></span>
+          <span class="swatch" style="background:#d8c8b5;"></span>
+          <span class="swatch" style="background:#475569;"></span>
+        </div>
+        <div class="button-row">
+          <a class="preview-btn" href="trust-and-justice/index.html" target="_blank">Open preview</a>
+        </div>
+      </article>
+
+      <article class="card">
+        <div>
+          <span style="display:inline-flex;padding:0.5rem 0.8rem;border-radius:999px;background:#d8fdf1;color:#115e59;font-size:0.82rem;font-weight:700;">Friendly Marketplace</span>
+          <h2>Warm, approachable, and modern.</h2>
+        </div>
+        <p>A cheerful marketplace-style theme with soft shapes, bright accents, and friendly language. Excellent for consumer-facing dispute workflows and platform-facing users.</p>
+        <div class="palette">
+          <span class="swatch" style="background:#f8faf8;"></span>
+          <span class="swatch" style="background:#0f766e;"></span>
+          <span class="swatch" style="background:#ccfbf1;"></span>
+          <span class="swatch" style="background:#fcd34d;"></span>
+          <span class="swatch" style="background:#475569;"></span>
+        </div>
+        <div class="button-row">
+          <a class="preview-btn" href="friendly-marketplace/index.html" target="_blank">Open preview</a>
+        </div>
+      </article>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,273 @@
+:root {
+  color-scheme: light;
+  font-family: 'Poppins', sans-serif;
+  --bg: #f8faf8;
+  --surface: #ffffff;
+  --surface-soft: #f5f7f6;
+  --text: #0f172a;
+  --muted: #475569;
+  --accent: #0f766e;
+  --accent-soft: #ccfbf1;
+  --border: #d7dadc;
+  --highlight: #fcd34d;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.75rem 2rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logo {
+  width: 3rem;
+  height: 3rem;
+  display: grid;
+  place-items: center;
+  border-radius: 1rem;
+  background: var(--accent);
+  color: white;
+  font-weight: 700;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.brand p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+nav {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+nav a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.page {
+  width: min(1180px, calc(100% - 2rem));
+  margin: 0 auto 3rem;
+  display: grid;
+  gap: 1.75rem;
+}
+
+.hero-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  border-radius: 1.75rem;
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.16), rgba(236, 72, 153, 0.08));
+}
+
+.hero-card h2 {
+  margin: 0.5rem 0 0;
+  font-size: 2rem;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.button,
+.primary {
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  padding: 0.95rem 1.5rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.metric-card,
+.panel,
+.soft-panel {
+  background: white;
+  border-radius: 1.5rem;
+  border: 1px solid var(--border);
+  padding: 1.5rem;
+}
+
+.metric-card p {
+  margin: 0 0 0.65rem;
+  color: var(--muted);
+}
+
+.metric-card strong {
+  font-size: 1.85rem;
+}
+
+.panel {
+  padding: 1.75rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.form-panel {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+label {
+  display: grid;
+  gap: 0.55rem;
+  font-size: 0.95rem;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 1rem 1.1rem;
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  font: inherit;
+  color: var(--text);
+}
+
+textarea {
+  min-height: 8rem;
+  resize: none;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.evidence-cards {
+  display: grid;
+  gap: 1rem;
+}
+
+.evidence-item {
+  padding: 1.5rem;
+  border-radius: 1.35rem;
+  border: 1px solid var(--border);
+  background: white;
+}
+
+.evidence-item h4 {
+  margin: 0 0 0.65rem;
+}
+
+.evidence-item p {
+  margin: 0 0 0.9rem;
+  color: var(--muted);
+}
+
+.chip {
+  display: inline-flex;
+  padding: 0.55rem 0.85rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.summary-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1.5fr 1fr;
+}
+
+.result-card,
+.next-step-card {
+  padding: 1.5rem;
+  border-radius: 1.3rem;
+  background: white;
+  border: 1px solid var(--border);
+}
+
+.status-tag {
+  display: inline-flex;
+  padding: 0.5rem 0.85rem;
+  border-radius: 999px;
+  background: #ffedd5;
+  color: #9a3412;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.result-card h3 {
+  margin: 0.85rem 0 0.9rem;
+}
+
+.next-step-card p {
+  margin: 0 0 0.9rem;
+}
+
+.action-list h4 {
+  margin: 0 0 0.85rem;
+}
+
+.action-list ul {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+}
+
+.action-list li {
+  margin-bottom: 0.8rem;
+}
+
+@media (max-width: 920px) {
+  .overview-grid,
+  .form-panel,
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    width: min(100%, calc(100% - 1.25rem));
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
