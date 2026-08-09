@@ -229,16 +229,35 @@ tests/
 
 ## Screenshots
 
-> Add final competition screenshots before submission.
+### Dashboard
 
-| View | Preview |
-| --- | --- |
-| Landing page | _Screenshot placeholder_ |
-| Wallet selection | _Screenshot placeholder_ |
-| Create dispute | _Screenshot placeholder_ |
-| Evidence submission | _Screenshot placeholder_ |
-| Dashboard and case detail | _Screenshot placeholder_ |
-| Verdict and payment split | _Screenshot placeholder_ |
+The dashboard provides an at-a-glance view of dispute activity and makes it easy to review cases stored on GenLayer.
+
+![EquiVerdict dashboard](docs/screenshots/dashboard.png)
+
+### Create Dispute
+
+The dispute creation screen captures the parties, category, disputed amount, and agreement details in a clear, guided workflow.
+
+![Create a dispute in EquiVerdict](docs/screenshots/create-dispute.png)
+
+### Connect Wallet
+
+The wallet connection interface lets users securely select a compatible injected wallet before interacting with the GenLayer network.
+
+![Connect a wallet to EquiVerdict](docs/screenshots/connect-wallet.png)
+
+### Submit Evidence
+
+The evidence submission screen enables a party to provide structured supporting information for evaluation by the Intelligent Contract.
+
+![Submit dispute evidence in EquiVerdict](docs/screenshots/submit-evidence.png)
+
+### Intelligent Verdict
+
+This screen demonstrates a completed GenLayer dispute evaluation, showing the verdict, confidence score, reasoning, and uploaded evidence.
+
+![Completed GenLayer intelligent verdict](docs/screenshots/verdict.png)
 
 ## Future Improvements
 
