@@ -35,11 +35,11 @@ def evidence(role: str, summary: str, evidence_type: str = "chat") -> dict:
 
 def verdict(**overrides) -> dict:
     result = {
-        "verdict_category": "partial",
+        "verdict_category": "split",
         "decision_label": "Partial payment",
         "confidence_score": 78,
         "payment_split": {"client": 40, "freelancer": 60},
-        "explanation": ["Both submissions support partial performance."],
+        "explanation": "Both submissions support partial performance.",
         "recommended_next_step": "split_payment",
     }
     result.update(overrides)
@@ -81,6 +81,7 @@ def test_consensus_returned_verdict_is_persisted(
         decision_label="Release most payment",
         confidence_score="82",
         payment_split={"client": "15", "freelancer": "85"},
+        recommended_next_step="release_freelancer",
     )
     direct_vm.mock_llm(r".*You are EquiVerdict.*", json.dumps(expected))
 
@@ -96,6 +97,7 @@ def test_consensus_returned_verdict_is_persisted(
     assert stored["verdict_category"] == "favor_freelancer"
     assert stored["confidence_score"] == 82
     assert stored["payment_split"] == {"client": 15, "freelancer": 85}
+    assert isinstance(stored["explanation"], str)
 
 
 @pytest.mark.parametrize(
@@ -104,6 +106,7 @@ def test_consensus_returned_verdict_is_persisted(
         verdict(confidence_score="75.5"),
         verdict(payment_split={"client": 40, "freelancer": 40}),
         verdict(verdict_category="unsupported_label"),
+        verdict(recommended_next_step="invented_action"),
     ],
 )
 def test_malformed_nondeterministic_output_is_rejected(
@@ -137,3 +140,9 @@ def test_duplicate_and_invalid_disputes_fail_deterministically(
     contract.submit_dispute("case-duplicate", "Agreement", "100", client, [])
     with direct_vm.expect_revert("Case ID already exists"):
         contract.submit_dispute("case-duplicate", "Agreement", "100", client, [])
+
+
+def test_missing_case_fails_with_concise_error(direct_deploy):
+    contract = direct_deploy("contracts/dispute_resolver.py", sdk_version=SDK_VERSION)
+    with pytest.raises(Exception, match="Case not found"):
+        contract.get_dispute("missing-case")

@@ -10,7 +10,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "echo \"No frontend tests configured yet\" && exit 0"
+    "test": "node --experimental-strip-types --test tests/frontend/*.test.mjs"
   },
   "keywords": [],
   "author": "",

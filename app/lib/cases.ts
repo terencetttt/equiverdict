@@ -70,7 +70,7 @@ type ContractDispute = {
     decision_label?: string
     confidence_score?: number
     recommended_next_step?: string
-    explanation?: string[]
+    explanation?: string | string[]
     payment_split?: { client?: number; freelancer?: number }
   }
 }
@@ -119,7 +119,11 @@ export function mapContractDispute(record: unknown): DisputeCase {
       decisionLabel: raw.verdict?.decision_label ?? 'Pending review',
       confidenceScore: raw.verdict?.confidence_score ?? 0,
       recommendedNextStep: raw.verdict?.recommended_next_step ?? 'await_review',
-      explanation: raw.verdict?.explanation ?? [],
+      explanation: Array.isArray(raw.verdict?.explanation)
+        ? raw.verdict.explanation
+        : raw.verdict?.explanation
+          ? [raw.verdict.explanation]
+          : [],
       paymentSplit: {
         client: raw.verdict?.payment_split?.client ?? 0,
         freelancer: raw.verdict?.payment_split?.freelancer ?? 0,

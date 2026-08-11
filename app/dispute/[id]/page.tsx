@@ -4,6 +4,7 @@ import { use, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { DisputeCase } from '../../lib/cases'
 import { getDispute } from '../../lib/genlayer'
+import { isCaseNotFoundError } from '../../lib/transaction-outcome'
 
 export default function DisputeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -14,7 +15,7 @@ export default function DisputeDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     getDispute(decodeURIComponent(id))
       .then(setCaseData)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load this dispute.'))
+      .catch((err) => setError(isCaseNotFoundError(err) ? 'Case not found' : 'Unable to load this dispute right now.'))
       .finally(() => setLoading(false))
   }, [id])
 

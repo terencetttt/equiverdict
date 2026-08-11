@@ -3,6 +3,11 @@ import { testnetBradbury } from 'genlayer-js/chains'
 import { ExecutionResult, TransactionStatus } from 'genlayer-js/types'
 import { DisputeDraft, EvidenceItem, mapContractDispute } from './cases'
 import {
+  CONSENSUS_UNDETERMINED_MESSAGE,
+  classifyTransactionReceipt,
+  conciseExecutionError,
+} from './transaction-outcome'
+import {
   BRADBURY_CHAIN_ID,
   NO_WALLET_MESSAGE,
   discoverWallets,
@@ -11,7 +16,7 @@ import {
   setSelectedWalletProvider,
 } from './wallet'
 
-export const CONTRACT_ADDRESS = '0x5EB492CA0b5151ACC910Bf2685342cBaf34F15F4' as const
+export const CONTRACT_ADDRESS = '0x1e3F5ffAa55c891b30b2b920eEE65E5e154b5aFe' as const
 
 const readClient = createClient({ chain: testnetBradbury })
 
@@ -34,7 +39,12 @@ function errorText(value: unknown): string | null {
 }
 
 export function formatTransactionError(error: unknown) {
-  return errorText(error) ?? 'Unknown wallet or RPC error.'
+  const message = errorText(error)
+  if (!message) return 'Unable to complete the GenLayer transaction.'
+  if (message.length > 300 || /txCalldata|Raw Call Arguments|Traceback|\"abi\"|0x[0-9a-f]{64}/i.test(message)) {
+    return 'Unable to complete the GenLayer transaction. Please try again.'
+  }
+  return message
 }
 
 export class GenLayerExecutionError extends Error {
@@ -46,6 +56,13 @@ export class GenLayerExecutionError extends Error {
   ) {
     super(message)
     this.name = 'GenLayerExecutionError'
+  }
+}
+
+export class GenLayerConsensusError extends Error {
+  constructor(public readonly transactionHash: string) {
+    super(CONSENSUS_UNDETERMINED_MESSAGE)
+    this.name = 'GenLayerConsensusError'
   }
 }
 
@@ -129,19 +146,33 @@ export async function submitDispute(draft: DisputeDraft, evidence: Omit<Evidence
     value: BigInt(0),
   })
 
-  const receipt = await readClient.waitForTransactionReceipt({
+  let receipt = await readClient.waitForTransactionReceipt({
     hash,
     status: TransactionStatus.ACCEPTED,
     interval: 3000,
     retries: 100,
   })
-  if (receipt.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
+  let outcome = classifyTransactionReceipt(receipt)
+  while (outcome === 'pending') {
+    receipt = await readClient.waitForTransactionReceipt({
+      hash,
+      status: TransactionStatus.ACCEPTED,
+      interval: 3000,
+      retries: 100,
+    })
+    outcome = classifyTransactionReceipt(receipt)
+  }
+
+  if (outcome === 'undetermined') {
+    throw new GenLayerConsensusError(String(hash))
+  }
+  if (outcome === 'execution_error') {
     let executionError = 'Contract execution failed without a trace message.'
     try {
       const trace = await readClient.debugTraceTransaction({ hash })
-      executionError = trace.stderr?.trim() || trace.stdout?.trim() || `GenVM result code ${trace.result_code}`
-    } catch (traceError) {
-      executionError = `Unable to fetch GenVM trace: ${formatTransactionError(traceError)}`
+      executionError = conciseExecutionError(trace.stderr?.trim() || trace.stdout?.trim())
+    } catch {
+      executionError = 'The GenLayer contract could not evaluate this dispute.'
     }
     throw new GenLayerExecutionError(
       'Bradbury accepted the transaction, but contract execution failed.',
@@ -150,8 +181,8 @@ export async function submitDispute(draft: DisputeDraft, evidence: Omit<Evidence
       executionError,
     )
   }
-  if (receipt.txExecutionResultName !== ExecutionResult.FINISHED_WITH_RETURN) {
-    throw new Error(`Unexpected contract execution result: ${receipt.txExecutionResultName ?? 'unknown'}`)
+  if (outcome !== 'success' || receipt.txExecutionResultName !== ExecutionResult.FINISHED_WITH_RETURN) {
+    throw new Error('The dispute transaction did not complete successfully.')
   }
 
   return { hash: String(hash), caseId: draft.caseId }

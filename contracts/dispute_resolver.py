@@ -9,8 +9,14 @@ ERROR_LLM = "[LLM_ERROR]"
 VERDICT_CATEGORIES = (
     "favor_client",
     "favor_freelancer",
-    "partial",
+    "split",
     "insufficient_evidence",
+)
+NEXT_STEPS = (
+    "refund_client",
+    "release_freelancer",
+    "split_payment",
+    "request_more_evidence",
 )
 
 
@@ -72,9 +78,8 @@ class FreelanceDisputeResolver(gl.Contract):
             "freelancer_evidence": freelancer_items,
         }
 
-        # prompt_comparative runs the evaluator independently for the leader and
-        # validators. Validators judge substantive equivalence under the principle
-        # below; only the consensus-backed leader verdict is returned here.
+        # Validators independently rerun the same dispute evaluation and compare
+        # its stable decision fields. Only the consensus-backed verdict is returned.
         verdict = self._evaluate_dispute(dispute_context)
         case_data = {
             "case_id": case_id,
@@ -127,13 +132,14 @@ Consider every evidence item's type, importance, summary, timestamp, URL, and
 role, while judging credibility and relevance from the submitted material only.
 
 Return one JSON-safe object with exactly these fields:
-- verdict_category: one of favor_client, favor_freelancer, partial,
+- verdict_category: one of favor_client, favor_freelancer, split,
   insufficient_evidence
 - decision_label: concise human-readable decision
 - confidence_score: integer from 0 through 100
 - payment_split: object with integer client and freelancer percentages totaling 100
-- explanation: JSON array of concise reasoning strings grounded in the submissions
-- recommended_next_step: concise action string
+- explanation: concise narrative text grounded in the submissions
+- recommended_next_step: one of refund_client, release_freelancer,
+  split_payment, request_more_evidence
 
 Never use floats. Never omit a field. Do not wrap the object in markdown.
 
@@ -144,17 +150,26 @@ DISPUTE_CONTEXT:
             raw = gl.nondet.exec_prompt(prompt, response_format="json")
             return self._normalize_verdict(raw)
 
-        return gl.eq_principle.prompt_comparative(
-            evaluate,
-            principle="""Both answers must adjudicate the same submitted dispute.
-They must agree on the substantive prevailing outcome represented by
-verdict_category and on whether the payment allocation favors the client,
-favors the freelancer, is an equal split, or awards neither side. Confidence
-scores may differ by at most 20 integer points and payment percentages may differ
-by at most 20 integer points per party. Explanations may use different wording,
-but must be neutral, grounded only in the same agreement and both parties'
-submitted evidence, contain no invented facts, and support the outcome.""",
-        )
+        def validate(leader_result: gl.vm.Result) -> bool:
+            if not isinstance(leader_result, gl.vm.Return):
+                return False
+            validator_verdict = evaluate()
+            leader_verdict = leader_result.calldata
+
+            if leader_verdict["verdict_category"] != validator_verdict["verdict_category"]:
+                return False
+            if leader_verdict["recommended_next_step"] != validator_verdict["recommended_next_step"]:
+                return False
+            if abs(leader_verdict["confidence_score"] - validator_verdict["confidence_score"]) > 25:
+                return False
+            if abs(
+                leader_verdict["payment_split"]["client"]
+                - validator_verdict["payment_split"]["client"]
+            ) > 25:
+                return False
+            return True
+
+        return gl.vm.run_nondet_unsafe(evaluate, validate)
 
     def _normalize_verdict(self, raw: dict) -> dict:
         if not isinstance(raw, dict):
@@ -173,6 +188,8 @@ submitted evidence, contain no invented facts, and support the outcome.""",
             raise gl.vm.UserError(ERROR_LLM + " Invalid decision_label")
         if not isinstance(next_step, str) or not next_step.strip():
             raise gl.vm.UserError(ERROR_LLM + " Invalid recommended_next_step")
+        if next_step not in NEXT_STEPS:
+            raise gl.vm.UserError(ERROR_LLM + " Invalid recommended_next_step")
         if confidence < 0 or confidence > 100:
             raise gl.vm.UserError(ERROR_LLM + " confidence_score must be 0-100")
         if not isinstance(split, dict):
@@ -187,22 +204,30 @@ submitted evidence, contain no invented facts, and support the outcome.""",
         if client + freelancer != 100:
             raise gl.vm.UserError(ERROR_LLM + " Payment percentages must total 100")
 
-        if isinstance(explanation, str):
-            explanation = [explanation.strip()]
-        if not isinstance(explanation, list) or len(explanation) == 0:
-            raise gl.vm.UserError(ERROR_LLM + " explanation must be a non-empty array")
-        clean_explanation = []
-        for reason in explanation:
-            if not isinstance(reason, str) or not reason.strip():
-                raise gl.vm.UserError(ERROR_LLM + " Invalid explanation item")
-            clean_explanation.append(reason.strip())
+        if not isinstance(explanation, str) or not explanation.strip():
+            raise gl.vm.UserError(ERROR_LLM + " explanation must be narrative text")
+
+        expected_step = {
+            "favor_client": "refund_client",
+            "favor_freelancer": "release_freelancer",
+            "split": "split_payment",
+            "insufficient_evidence": "request_more_evidence",
+        }[category]
+        if next_step != expected_step:
+            raise gl.vm.UserError(ERROR_LLM + " recommended_next_step conflicts with verdict")
+        if category == "favor_client" and client <= freelancer:
+            raise gl.vm.UserError(ERROR_LLM + " payment_split conflicts with verdict")
+        if category == "favor_freelancer" and freelancer <= client:
+            raise gl.vm.UserError(ERROR_LLM + " payment_split conflicts with verdict")
+        if category == "split" and (client == 0 or freelancer == 0):
+            raise gl.vm.UserError(ERROR_LLM + " split verdict must pay both parties")
 
         return {
             "verdict_category": category,
             "decision_label": label.strip(),
             "confidence_score": confidence,
             "payment_split": {"client": client, "freelancer": freelancer},
-            "explanation": clean_explanation,
+            "explanation": explanation.strip(),
             "recommended_next_step": next_step.strip(),
         }
 
