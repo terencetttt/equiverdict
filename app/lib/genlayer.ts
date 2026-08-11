@@ -67,7 +67,7 @@ export async function getDispute(caseId: string) {
   return mapContractDispute(result)
 }
 
-export async function submitDispute(draft: DisputeDraft, evidence: Omit<EvidenceItem, 'id'>) {
+export async function submitDispute(draft: DisputeDraft, evidence: Omit<EvidenceItem, 'id'>[]) {
   let provider = getSelectedWalletProvider()
   if (!provider) {
     const wallets = await discoverWallets()
@@ -104,17 +104,17 @@ export async function submitDispute(draft: DisputeDraft, evidence: Omit<Evidence
     account: address as `0x${string}`,
     provider,
   })
-  const contractEvidence = {
-    type: evidence.type,
-    role: evidence.role,
-    title: evidence.title,
-    summary: evidence.summary,
-    importance: evidence.importance,
-    timestamp: evidence.timestamp,
-    url: evidence.url,
-  }
-  const clientEvidence = evidence.role === 'client' ? [contractEvidence] : []
-  const freelancerEvidence = evidence.role === 'freelancer' ? [contractEvidence] : []
+  const contractEvidence = evidence.map((item) => ({
+    type: item.type,
+    role: item.role,
+    title: item.title,
+    summary: item.summary,
+    importance: item.importance,
+    timestamp: item.timestamp,
+    url: item.url,
+  }))
+  const clientEvidence = contractEvidence.filter((item) => item.role === 'client')
+  const freelancerEvidence = contractEvidence.filter((item) => item.role === 'freelancer')
 
   const hash = await writeClient.writeContract({
     address: CONTRACT_ADDRESS,

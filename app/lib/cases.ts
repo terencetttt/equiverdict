@@ -1,4 +1,4 @@
-export type EvidenceRole = 'client' | 'freelancer' | 'arbiter'
+export type EvidenceRole = 'client' | 'freelancer'
 
 export interface EvidenceItem {
   id: string
@@ -87,7 +87,10 @@ export function mapContractDispute(record: unknown): DisputeCase {
     agreement = { summary: raw.agreement ?? '' }
   }
 
-  const allEvidence = [...(raw.client_evidence ?? []), ...(raw.freelancer_evidence ?? [])]
+  const allEvidence = [
+    ...(raw.client_evidence ?? []).map((item) => ({ ...item, role: 'client' as const })),
+    ...(raw.freelancer_evidence ?? []).map((item) => ({ ...item, role: 'freelancer' as const })),
+  ]
   const caseId = raw.case_id ?? agreement.caseId ?? ''
   const status = raw.status ?? 'submitted'
 

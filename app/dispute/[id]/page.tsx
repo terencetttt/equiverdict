@@ -36,7 +36,7 @@ export default function DisputeDetailPage({ params }: { params: Promise<{ id: st
       </div>
       <div className="panel">
         <div className="heading-row"><div><p className="eyebrow">Evidence</p><h2>Uploaded evidence</h2></div></div>
-        <div className="evidence-list">{caseData.evidence.map((item) => <article key={item.id} className="evidence-item"><div><span>{item.type}</span><h4>{item.title}</h4><p>{item.summary}</p></div><span className={`badge ${item.role === 'client' ? 'document' : 'evidence'}`}>{item.role}</span></article>)}</div>
+        <div className="evidence-list">{caseData.evidence.map((item) => <article key={item.id} className="evidence-item"><div><span>{item.type}</span><h4>{item.title}</h4><p>{item.summary}</p></div><span className={`badge ${item.role === 'client' ? 'document' : 'evidence'}`}>{item.role === 'client' ? 'Client' : 'Freelancer'}</span></article>)}</div>
       </div>
     </section>
   )
