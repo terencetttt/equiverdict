@@ -11,7 +11,7 @@ import {
   setSelectedWalletProvider,
 } from './wallet'
 
-export const CONTRACT_ADDRESS = '0xb3d23b867ab6aca59e5b3915157e1bbf1309966b' as const
+export const CONTRACT_ADDRESS = '0x5EB492CA0b5151ACC910Bf2685342cBaf34F15F4' as const
 
 const readClient = createClient({ chain: testnetBradbury })
 

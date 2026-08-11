@@ -5,6 +5,15 @@ from dataclasses import dataclass
 import json
 
 
+ERROR_LLM = "[LLM_ERROR]"
+VERDICT_CATEGORIES = (
+    "favor_client",
+    "favor_freelancer",
+    "partial",
+    "insufficient_evidence",
+)
+
+
 @allow_storage
 @dataclass
 class EvidenceItem:
@@ -34,22 +43,39 @@ class FreelanceDisputeResolver(gl.Contract):
         client_evidence: list[EvidenceItem],
         freelancer_evidence: list[EvidenceItem],
     ) -> None:
+        # These checks are deliberately deterministic. They validate the request;
+        # they do not decide which party should prevail.
         if case_id in self.cases:
-            raise gl.UserError("Case ID already exists")
+            raise gl.vm.UserError("Case ID already exists")
         if not case_id.strip():
-            raise gl.UserError("Case ID is required")
+            raise gl.vm.UserError("Case ID is required")
         if not agreement.strip():
-            raise gl.UserError("Agreement text is required")
+            raise gl.vm.UserError("Agreement text is required")
         if not disputed_amount.strip():
-            raise gl.UserError("Disputed amount is required")
+            raise gl.vm.UserError("Disputed amount is required")
         if len(client_evidence) == 0 and len(freelancer_evidence) == 0:
-            raise gl.UserError("At least one evidence item is required")
+            raise gl.vm.UserError("At least one evidence item is required")
 
-        client_items = [self._evidence_to_dict(item) for item in client_evidence]
-        freelancer_items = [
-            self._evidence_to_dict(item) for item in freelancer_evidence
+        client_items = [
+            self._evidence_to_dict(item, "client") for item in client_evidence
         ]
-        verdict = self._evaluate_dispute(client_items, freelancer_items)
+        freelancer_items = [
+            self._evidence_to_dict(item, "freelancer")
+            for item in freelancer_evidence
+        ]
+        dispute_context = {
+            "case_id": case_id,
+            "agreement": agreement,
+            "case_description": agreement,
+            "disputed_amount": disputed_amount,
+            "client_evidence": client_items,
+            "freelancer_evidence": freelancer_items,
+        }
+
+        # prompt_comparative runs the evaluator independently for the leader and
+        # validators. Validators judge substantive equivalence under the principle
+        # below; only the consensus-backed leader verdict is returned here.
+        verdict = self._evaluate_dispute(dispute_context)
         case_data = {
             "case_id": case_id,
             "agreement": agreement,
@@ -66,95 +92,132 @@ class FreelanceDisputeResolver(gl.Contract):
     @gl.public.view
     def get_dispute(self, case_id: str) -> dict:
         if case_id not in self.cases:
-            raise gl.UserError("Case not found")
+            raise gl.vm.UserError("Case not found")
         return json.loads(self.cases[case_id])
 
     @gl.public.view
     def list_disputes(self) -> list[dict]:
         return [json.loads(self.cases[case_id]) for case_id in self.case_order]
 
-    def _evidence_to_dict(self, item: dict) -> dict:
-        return {
-            "type": item["type"],
-            "role": item["role"],
-            "title": item["title"],
-            "summary": item["summary"],
-            "importance": item["importance"],
-            "timestamp": item["timestamp"],
-            "url": item["url"],
+    def _evidence_to_dict(self, item: dict, expected_role: str) -> dict:
+        result = {
+            "type": item["type"].strip(),
+            "role": item["role"].strip(),
+            "title": item["title"].strip(),
+            "summary": item["summary"].strip(),
+            "importance": item["importance"].strip(),
+            "timestamp": item["timestamp"].strip(),
+            "url": item["url"].strip(),
         }
+        if result["role"] != expected_role:
+            raise gl.vm.UserError("Evidence role does not match its submitted party")
+        if not result["type"] or not result["summary"]:
+            raise gl.vm.UserError("Evidence type and summary are required")
+        return result
 
-    def _evaluate_dispute(
-        self, client_items: list[dict], freelancer_items: list[dict]
-    ) -> dict:
-        client_score = self._score_items(client_items, "client")
-        freelancer_score = self._score_items(freelancer_items, "freelancer")
-        total_score = client_score + freelancer_score
+    def _evaluate_dispute(self, dispute_context: dict) -> dict:
+        context_json = json.dumps(dispute_context, sort_keys=True)
+        prompt = """You are EquiVerdict, a neutral adjudicator for a freelance dispute.
 
-        if total_score == 0:
-            return {
-                "verdict_category": "insufficient_evidence",
-                "decision_label": "Insufficient evidence",
-                "confidence_score": 40,
-                "payment_split": {"client": 0, "freelancer": 0},
-                "explanation": ["No evidence details could be evaluated."],
-                "recommended_next_step": "gather_more_evidence",
-            }
+Assess ONLY the submitted agreement/case description, disputed amount, and the
+verifiable evidence supplied by the client and freelancer in DISPUTE_CONTEXT.
+Treat both parties neutrally. Do not invent, assume, or import facts. A URL is
+metadata unless its contents are actually included in the submitted evidence.
+Consider every evidence item's type, importance, summary, timestamp, URL, and
+role, while judging credibility and relevance from the submitted material only.
 
-        client_share = (client_score * 100) // total_score
-        freelancer_share = 100 - client_share
-        if client_score > freelancer_score:
-            verdict_category = "favor_client"
-            decision_label = "Favor client"
-            next_step = "issue_refund"
-        elif freelancer_score > client_score:
-            verdict_category = "favor_freelancer"
-            decision_label = "Favor freelancer"
-            next_step = "release_payment"
-        else:
-            verdict_category = "partial"
-            decision_label = "Partial resolution"
-            next_step = "split_payment"
+Return one JSON-safe object with exactly these fields:
+- verdict_category: one of favor_client, favor_freelancer, partial,
+  insufficient_evidence
+- decision_label: concise human-readable decision
+- confidence_score: integer from 0 through 100
+- payment_split: object with integer client and freelancer percentages totaling 100
+- explanation: JSON array of concise reasoning strings grounded in the submissions
+- recommended_next_step: concise action string
 
-        confidence_score = min(
-            95, 50 + abs(client_score - freelancer_score) * 5
+Never use floats. Never omit a field. Do not wrap the object in markdown.
+
+DISPUTE_CONTEXT:
+""" + context_json
+
+        def evaluate() -> dict:
+            raw = gl.nondet.exec_prompt(prompt, response_format="json")
+            return self._normalize_verdict(raw)
+
+        return gl.eq_principle.prompt_comparative(
+            evaluate,
+            principle="""Both answers must adjudicate the same submitted dispute.
+They must agree on the substantive prevailing outcome represented by
+verdict_category and on whether the payment allocation favors the client,
+favors the freelancer, is an equal split, or awards neither side. Confidence
+scores may differ by at most 20 integer points and payment percentages may differ
+by at most 20 integer points per party. Explanations may use different wording,
+but must be neutral, grounded only in the same agreement and both parties'
+submitted evidence, contain no invented facts, and support the outcome.""",
         )
+
+    def _normalize_verdict(self, raw: dict) -> dict:
+        if not isinstance(raw, dict):
+            raise gl.vm.UserError(ERROR_LLM + " Verdict must be a JSON object")
+
+        category = raw.get("verdict_category")
+        label = raw.get("decision_label")
+        next_step = raw.get("recommended_next_step")
+        explanation = raw.get("explanation")
+        split = raw.get("payment_split")
+        confidence = self._required_int(raw.get("confidence_score"), "confidence_score")
+
+        if category not in VERDICT_CATEGORIES:
+            raise gl.vm.UserError(ERROR_LLM + " Invalid verdict_category")
+        if not isinstance(label, str) or not label.strip():
+            raise gl.vm.UserError(ERROR_LLM + " Invalid decision_label")
+        if not isinstance(next_step, str) or not next_step.strip():
+            raise gl.vm.UserError(ERROR_LLM + " Invalid recommended_next_step")
+        if confidence < 0 or confidence > 100:
+            raise gl.vm.UserError(ERROR_LLM + " confidence_score must be 0-100")
+        if not isinstance(split, dict):
+            raise gl.vm.UserError(ERROR_LLM + " payment_split must be an object")
+
+        client = self._required_int(split.get("client"), "payment_split.client")
+        freelancer = self._required_int(
+            split.get("freelancer"), "payment_split.freelancer"
+        )
+        if client < 0 or client > 100 or freelancer < 0 or freelancer > 100:
+            raise gl.vm.UserError(ERROR_LLM + " Payment percentages must be 0-100")
+        if client + freelancer != 100:
+            raise gl.vm.UserError(ERROR_LLM + " Payment percentages must total 100")
+
+        if isinstance(explanation, str):
+            explanation = [explanation.strip()]
+        if not isinstance(explanation, list) or len(explanation) == 0:
+            raise gl.vm.UserError(ERROR_LLM + " explanation must be a non-empty array")
+        clean_explanation = []
+        for reason in explanation:
+            if not isinstance(reason, str) or not reason.strip():
+                raise gl.vm.UserError(ERROR_LLM + " Invalid explanation item")
+            clean_explanation.append(reason.strip())
+
         return {
-            "verdict_category": verdict_category,
-            "decision_label": decision_label,
-            "confidence_score": confidence_score,
-            "payment_split": {
-                "client": client_share,
-                "freelancer": freelancer_share,
-            },
-            "explanation": [
-                "Client evidence score: " + str(client_score) + ".",
-                "Freelancer evidence score: " + str(freelancer_score) + ".",
-                "The contract evaluated evidence importance and evidence type relevance.",
-            ],
-            "recommended_next_step": next_step,
+            "verdict_category": category,
+            "decision_label": label.strip(),
+            "confidence_score": confidence,
+            "payment_split": {"client": client, "freelancer": freelancer},
+            "explanation": clean_explanation,
+            "recommended_next_step": next_step.strip(),
         }
 
-    def _score_items(self, items: list[dict], side: str) -> int:
-        score = 0
-        for item in items:
-            if item["importance"] == "high":
-                score += 3
-            elif item["importance"] == "medium":
-                score += 2
+    def _required_int(self, value, field_name: str) -> int:
+        # Integer strings are normalized safely; bools and floats are rejected.
+        if isinstance(value, bool):
+            raise gl.vm.UserError(ERROR_LLM + " " + field_name + " must be an integer")
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned.startswith("-"):
+                digits = cleaned[1:]
             else:
-                score += 1
-
-            if side == "client" and item["type"] in (
-                "milestone",
-                "chat",
-                "delivery_note",
-            ):
-                score += 1
-            if side == "freelancer" and item["type"] in (
-                "screenshot_link",
-                "invoice",
-                "delivery_note",
-            ):
-                score += 1
-        return score
+                digits = cleaned
+            if digits.isdigit() and digits:
+                return int(cleaned)
+        raise gl.vm.UserError(ERROR_LLM + " " + field_name + " must be an integer")
