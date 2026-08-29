@@ -9,6 +9,18 @@ export interface EvidenceItem {
   importance: string
   timestamp: string
   url: string
+  evidenceSha256: string
+  submittingWallet: string
+}
+
+export interface EvidenceSubmission {
+  type: string
+  title: string
+  summary: string
+  importance: string
+  timestamp: string
+  url: string
+  evidenceSha256: string
 }
 
 export interface DisputeCase {
@@ -19,12 +31,15 @@ export interface DisputeCase {
   amount: string
   client: string
   freelancer: string
+  clientWallet: string
+  freelancerWallet: string
   createdAt: string
   status: string
   badge: 'pending' | 'review' | 'resolved'
   evidence: EvidenceItem[]
   verdict: VerdictResult
   submittedBy: string
+  evaluatedBy: string
 }
 
 export interface VerdictResult {
@@ -45,17 +60,20 @@ export interface DisputeDraft {
   summary: string
   clientName: string
   freelancerName: string
+  freelancerWallet: string
   amount: string
 }
 
 type ContractEvidence = {
-  type?: string
-  role?: EvidenceRole
+  evidence_type?: string
   title?: string
-  summary?: string
+  description?: string
   importance?: string
   timestamp?: string
-  url?: string
+  evidence_uri?: string
+  evidence_sha256?: string
+  submitting_wallet?: string
+  role?: EvidenceRole
 }
 
 type ContractDispute = {
@@ -64,6 +82,9 @@ type ContractDispute = {
   disputed_amount?: string
   status?: string
   submitted_by?: string
+  evaluated_by?: string
+  client_wallet?: string
+  freelancer_wallet?: string
   client_evidence?: ContractEvidence[]
   freelancer_evidence?: ContractEvidence[]
   verdict?: {
@@ -92,7 +113,7 @@ export function mapContractDispute(record: unknown): DisputeCase {
     ...(raw.freelancer_evidence ?? []).map((item) => ({ ...item, role: 'freelancer' as const })),
   ]
   const caseId = raw.case_id ?? agreement.caseId ?? ''
-  const status = raw.status ?? 'submitted'
+  const status = raw.status ?? 'collecting_evidence'
 
   return {
     id: caseId,
@@ -102,18 +123,22 @@ export function mapContractDispute(record: unknown): DisputeCase {
     amount: raw.disputed_amount ?? agreement.amount ?? '',
     client: agreement.clientName ?? 'Client',
     freelancer: agreement.freelancerName ?? 'Freelancer',
+    clientWallet: raw.client_wallet ?? '',
+    freelancerWallet: raw.freelancer_wallet ?? agreement.freelancerWallet ?? '',
     createdAt: allEvidence[0]?.timestamp?.slice(0, 10) ?? '',
     status,
-    badge: status === 'evaluated' ? 'resolved' : status === 'submitted' ? 'review' : 'pending',
+    badge: status === 'evaluated' ? 'resolved' : status === 'evidence_ready' ? 'review' : 'pending',
     evidence: allEvidence.map((item, index) => ({
       id: `${caseId}-evidence-${index}`,
-      type: item.type ?? 'evidence',
+      type: item.evidence_type ?? 'evidence',
       title: item.title ?? 'Evidence',
-      summary: item.summary ?? '',
+      summary: item.description ?? '',
       role: item.role ?? 'client',
       importance: item.importance ?? 'medium',
       timestamp: item.timestamp ?? '',
-      url: item.url ?? '',
+      url: item.evidence_uri ?? '',
+      evidenceSha256: item.evidence_sha256 ?? '',
+      submittingWallet: item.submitting_wallet ?? '',
     })),
     verdict: {
       decisionLabel: raw.verdict?.decision_label ?? 'Pending review',
@@ -130,5 +155,6 @@ export function mapContractDispute(record: unknown): DisputeCase {
       },
     },
     submittedBy: raw.submitted_by ?? '',
+    evaluatedBy: raw.evaluated_by ?? '',
   }
 }
