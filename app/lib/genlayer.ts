@@ -79,8 +79,12 @@ async function selectedWallet() {
   let provider = getSelectedWalletProvider()
   if (!provider) {
     const wallets = await discoverWallets()
-    if (wallets.length === 1) {
-      provider = wallets[0].provider
+    const preferredWallet =
+      wallets.find((wallet) => /rabby/i.test(wallet.name)) ??
+      wallets[0]
+
+    if (preferredWallet) {
+      provider = preferredWallet.provider
       setSelectedWalletProvider(provider)
     }
   }
