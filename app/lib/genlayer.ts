@@ -275,5 +275,38 @@ export async function evaluateDispute(caseId: string) {
   })
 
   await waitForWrite(hash, true)
-  return { hash: String(hash), caseId }
+
+  // Bradbury may expose an ACCEPTED receipt before validator consensus is
+  // actually final. Do not report success or let the UI clear the draft
+  // until the contract state itself proves that evaluation was committed.
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const chainCase = await getDispute(caseId)
+    if (chainCase.status === 'evaluated') {
+      return { hash: String(hash), caseId }
+    }
+
+    try {
+      const tx = await readClient.getTransaction({ hash })
+      const txRecord = tx as unknown as Record<string, unknown>
+      const finalityText = [
+        txRecord.statusName,
+        txRecord.status,
+        txRecord.resultName,
+        txRecord.result,
+      ].map((value) => String(value ?? '')).join(' ')
+
+      if (/undetermined/i.test(finalityText)) {
+        throw new GenLayerConsensusError(String(hash))
+      }
+    } catch (error) {
+      if (error instanceof GenLayerConsensusError) throw error
+      // A temporary transaction-read failure must not be treated as success.
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, 3000))
+  }
+
+  // If Bradbury never commits `evaluated`, preserve the dispute draft and
+  // surface an unresolved-consensus result instead of navigating to 0/0.
+  throw new GenLayerConsensusError(String(hash))
 }
