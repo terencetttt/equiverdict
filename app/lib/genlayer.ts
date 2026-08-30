@@ -1,6 +1,6 @@
 import { createClient } from 'genlayer-js'
 import { testnetBradbury } from 'genlayer-js/chains'
-import { ExecutionResult, TransactionStatus } from 'genlayer-js/types'
+import { CalldataAddress, ExecutionResult, TransactionStatus } from 'genlayer-js/types'
 import { DisputeDraft, EvidenceSubmission, mapContractDispute } from './cases'
 import {
   CONSENSUS_UNDETERMINED_MESSAGE,
@@ -17,6 +17,15 @@ import {
 } from './wallet'
 
 export const CONTRACT_ADDRESS = '0x6dD436Fe2Cb40486f7D60Ca02161B05f90B319ce' as const
+
+function toCalldataAddress(address: `0x${string}`) {
+  const hex = address.slice(2)
+  const bytes = new Uint8Array(20)
+  for (let index = 0; index < 20; index += 1) {
+    bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16)
+  }
+  return new CalldataAddress(bytes)
+}
 
 const readClient = createClient({ chain: testnetBradbury })
 
@@ -202,7 +211,7 @@ export async function createDispute(draft: DisputeDraft) {
     functionName: 'create_dispute',
     args: [
       draft.caseId,
-      draft.freelancerWallet as `0x${string}`,
+      toCalldataAddress(draft.freelancerWallet as `0x${string}`),
       JSON.stringify(draft),
       draft.amount,
     ],
