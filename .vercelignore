@@ -1,0 +1,9 @@
+.venv312
+claimguard
+grantproof-genlayer
+milestoneguard-genlayer
+.reviewer-fix-backup-*
+contracts/milestone_guard.py
+tests/direct/test_milestone_guard.py
+equiverdict_fix_context.txt
+tsconfig.tsbuildinfo

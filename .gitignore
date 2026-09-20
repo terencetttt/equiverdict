@@ -9,3 +9,35 @@ node_modules/
 __pycache__/
 *.pyc
 .DS_Store
+.vercel
+.env*
+
+# Share the empty public frontend configuration template.
+!.env.example
+
+# Local toolchains and virtual environments
+.tools-node22/
+.tools-v06/
+.venv-v06/
+
+# Local backups and generated build metadata
+.reviewer-fix-backup-*/
+*.tsbuildinfo
+*.pre-steward-fix.py
+
+# Local fee/deployment scratch files
+fee-profile.json
+
+# Unrelated local projects
+claimguard/
+grantproof-genlayer/
+milestoneguard-genlayer/
+
+# Unrelated experimental contracts/tests
+contracts/claim_guard.py
+contracts/control_test.py
+contracts/milestone_guard.py
+tests/direct/test_milestone_guard.py
+
+# Local debugging/context notes
+equiverdict_fix_context.txt

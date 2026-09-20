@@ -4,19 +4,23 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   DISPUTE_DRAFT_KEY,
-  DisputeCase,
-  DisputeDraft,
-  EvidenceRole,
   EvidenceSubmission,
 } from '../../lib/cases'
 import {
   GenLayerExecutionError,
+  acceptAgreement,
+  freezeEvidence,
   evaluateDispute,
   formatTransactionError,
   getConnectedWalletAddress,
-  getDispute,
   submitEvidence,
 } from '../../lib/genlayer'
+
+import Link from 'next/link'
+import PendingTransactions from '../../components/PendingTransactions'
+import { AgreementDetails, EvidenceDetails } from '../../components/DisputeRecords'
+import { disputeActions } from '../../lib/lifecycle'
+import { useLiveDispute, usePendingWrites } from '../../lib/use-live-state'
 
 const evidenceTypes = [
   { value: 'milestone', label: 'Milestone' },
@@ -26,15 +30,12 @@ const evidenceTypes = [
   { value: 'other_text', label: 'Other text / JSON evidence' },
 ]
 
-function short(address: string) {
-  return address ? `${address.slice(0, 6)}...${address.slice(-4)}` : '—'
-}
-
 export default function SubmitEvidencePage() {
-  const [draft, setDraft] = useState<DisputeDraft | null>(null)
-  const [caseData, setCaseData] = useState<DisputeCase | null>(null)
-  const [walletAddress, setWalletAddress] = useState('')
-  const [role, setRole] = useState<EvidenceRole | null>(null)
+  const [caseId, setCaseId] = useState('')
+  const [caseInput, setCaseInput] = useState('')
+  const live = useLiveDispute(caseId)
+  const { caseData, walletAddress } = live
+  const pending = usePendingWrites(caseId || undefined)
   const [type, setType] = useState('')
   const [title, setTitle] = useState('')
   const [summary, setSummary] = useState('')
@@ -50,39 +51,60 @@ export default function SubmitEvidencePage() {
     executionError: string
   } | null>(null)
   const router = useRouter()
-
-  const refreshRole = useCallback(async (caseId: string) => {
-    const [chainCase, connected] = await Promise.all([
-      getDispute(caseId),
-      getConnectedWalletAddress(),
-    ])
-    setCaseData(chainCase)
-    setWalletAddress(connected)
-
-    const lower = connected.toLowerCase()
-    if (lower === chainCase.clientWallet.toLowerCase()) setRole('client')
-    else if (lower === chainCase.freelancerWallet.toLowerCase()) setRole('freelancer')
-    else setRole(null)
+  const reportError = useCallback((error: unknown) => {
+    setStatus('error')
+    setErrors([formatTransactionError(error)])
   }, [])
 
   useEffect(() => {
-    const saved = sessionStorage.getItem(DISPUTE_DRAFT_KEY)
-    if (!saved) {
-      setStatus('error')
-      setErrors(['Create a dispute on Bradbury before submitting evidence.'])
-      return
+    try {
+      const queryCase = new URLSearchParams(window.location.search).get('case')
+      const saved = sessionStorage.getItem(DISPUTE_DRAFT_KEY)
+      const savedCase = !queryCase && saved ? (JSON.parse(saved) as { caseId?: string }).caseId : ''
+      const id = queryCase || savedCase || ''
+      setCaseId(id)
+      setCaseInput(id)
+    } catch {
+      reportError(new Error('Unable to restore the saved case. Enter the case ID below.'))
     }
-    const parsed = JSON.parse(saved) as DisputeDraft
-    setDraft(parsed)
-    refreshRole(parsed.caseId).catch((error) => {
-      setStatus('error')
-      setErrors([formatTransactionError(error)])
-    })
-  }, [refreshRole])
+  }, [reportError])
+
+  const actions = disputeActions(caseData?.id === caseId ? caseData : null, walletAddress, status === 'pending' || pending.length > 0)
+  const role = actions.role
+
+  const openCase = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const id = caseInput.trim()
+    if (!id) return
+    setCaseId(id)
+    setErrors([])
+    setMessage('')
+    setStatus('idle')
+    window.history.replaceState(null, '', `/dispute/submit?case=${encodeURIComponent(id)}`)
+  }
+
+  const handleLifecycle = async (action: 'accept' | 'freeze') => {
+    if (!caseData || (action === 'accept' ? !actions.canAccept : !actions.canFreeze)) return
+    setStatus('pending')
+    setErrors([])
+    setFailedTransaction(null)
+    setMessage('Confirming on Studionet...')
+    try {
+      const result = action === 'accept'
+        ? await acceptAgreement(caseId, caseData.agreementSha256)
+        : await freezeEvidence(caseId)
+      live.apply(result.record)
+      setStatus('success')
+      setMessage(`${action === 'accept' ? 'Agreement accepted' : 'Evidence frozen'}. Transaction: ${result.hash}`)
+    } catch (error) {
+      reportError(error)
+      setMessage('')
+    }
+  }
 
   const handleSubmitEvidence = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!draft) return
+    if (!caseData || !actions.canSubmit) return
 
     const nextErrors: string[] = []
     if (!role) nextErrors.push('Only a party bound to this dispute can submit evidence.')
@@ -102,6 +124,7 @@ export default function SubmitEvidencePage() {
     }
 
     const evidence: EvidenceSubmission = {
+      acceptedAgreementSha256: caseData.agreementSha256,
       type,
       title: title.trim(),
       summary: summary.trim(),
@@ -114,11 +137,11 @@ export default function SubmitEvidencePage() {
     setErrors([])
     setFailedTransaction(null)
     setStatus('pending')
-    setMessage(`Submitting as ${role === 'client' ? 'Client' : 'Freelancer'} from ${short(walletAddress)}...`)
+    setMessage('Confirming on Studionet...')
 
     try {
-      const result = await submitEvidence(draft.caseId, evidence)
-      await refreshRole(draft.caseId)
+      const result = await submitEvidence(caseId, evidence)
+      live.apply(result.record)
       setType('')
       setTitle('')
       setSummary('')
@@ -126,7 +149,7 @@ export default function SubmitEvidencePage() {
       setUrl('')
       setSha256('')
       setStatus('success')
-      setMessage(`Evidence authenticated by wallet and stored on Bradbury. Transaction: ${result.hash}`)
+      setMessage(`Evidence authenticated by wallet and stored on Studionet. Transaction: ${result.hash}`)
     } catch (error) {
       setStatus('error')
       setErrors([formatTransactionError(error)])
@@ -140,7 +163,7 @@ export default function SubmitEvidencePage() {
   }
 
   const handleEvaluate = async () => {
-    if (!draft || !caseData) return
+    if (!caseData || !actions.canEvaluate) return
     const clientCount = caseData.evidence.filter((item) => item.role === 'client').length
     const freelancerCount = caseData.evidence.filter((item) => item.role === 'freelancer').length
 
@@ -158,12 +181,13 @@ export default function SubmitEvidencePage() {
     setErrors([])
     setFailedTransaction(null)
     setStatus('pending')
-    setMessage('GenLayer validators are fetching and SHA-256 verifying both parties’ evidence before consensus...')
+    setMessage('Confirming on Studionet...')
 
     try {
-      const result = await evaluateDispute(draft.caseId)
+      const result = await evaluateDispute(caseId)
+      live.apply(result.record)
       setStatus('success')
-      setMessage(`Consensus completed on Bradbury. Transaction: ${result.hash}`)
+      setMessage(`Consensus completed on Studionet. Transaction: ${result.hash}`)
       sessionStorage.removeItem(DISPUTE_DRAFT_KEY)
       window.setTimeout(() => router.push(`/dispute/${encodeURIComponent(result.caseId)}`), 700)
     } catch (error) {
@@ -183,21 +207,46 @@ export default function SubmitEvidencePage() {
 
   return (
     <section className="panel soft-panel">
+      <PendingTransactions caseId={caseId || undefined} refreshToken={status} onRecovered={async (id, method, record) => {
+        if (record) live.apply(record)
+        else await live.refresh()
+        setStatus('success')
+        setErrors([])
+        setFailedTransaction(null)
+        setMessage('Transaction confirmed. Case state refreshed.')
+        if (method === 'submit_evidence') {
+          setType(''); setTitle(''); setSummary(''); setImportance(''); setUrl(''); setSha256('')
+        }
+        if (method === 'evaluate_dispute') {
+          sessionStorage.removeItem(DISPUTE_DRAFT_KEY)
+          router.push(`/dispute/${encodeURIComponent(id)}`)
+        }
+      }} />
       <div className="heading-row">
         <div>
           <p className="eyebrow">Submit evidence</p>
           <h2>Wallet-authenticated supporting proof</h2>
           <p>Role is derived from the connected wallet. There is no user-selectable role.</p>
         </div>
-        <button
-          type="button"
-          className="secondary"
-          disabled={!draft || status === 'pending'}
-          onClick={() => draft && refreshRole(draft.caseId)}
-        >
-          Refresh wallet role
-        </button>
+        {!walletAddress && <button type="button" className="secondary" onClick={async () => {
+          try { await getConnectedWalletAddress(); await live.refresh() } catch (error) { reportError(error) }
+        }}>Connect wallet</button>}
       </div>
+
+      {live.loading && caseId && <p role="status">Reading current case state...</p>}
+      {live.error && <p role="status">Unable to read current state. Retrying automatically.</p>}
+      <form className="form-grid" onSubmit={openCase}>
+        <label>Open an existing case<input value={caseInput} onChange={(event) => setCaseInput(event.target.value)} placeholder="Case ID shared by either party" /></label>
+        <div><button className="secondary" type="submit" disabled={status === 'pending' || !caseInput.trim()}>Open case</button></div>
+      </form>
+
+      {caseData && <>
+        <p><strong>Case ID:</strong> {caseData.id} | <Link href={`/dispute/submit?case=${encodeURIComponent(caseData.id)}`}>Share this case link with the other party</Link></p>
+        <AgreementDetails record={caseData} />
+        <button type="button" className="secondary" disabled={!actions.canAccept} onClick={() => handleLifecycle('accept')}>Accept this agreement as {role || 'a bound party'}</button>
+        {!actions.mutuallyAccepted && <p>Both parties must accept before evidence can be submitted.</p>}
+        {caseData.evidenceFrozen && <p>Evidence is permanently frozen. No more evidence can be submitted to this case.</p>}
+      </>}
 
       {caseData && (
         <div className="detail-grid">
@@ -250,8 +299,8 @@ export default function SubmitEvidencePage() {
           <input value={sha256} onChange={(event) => setSha256(event.target.value)} placeholder="64 hexadecimal characters" aria-required="true" />
         </label>
         <div className="full-width">
-          <button type="submit" className="secondary" disabled={status === 'pending' || !role}>
-            {status === 'pending' ? 'Submitting...' : role ? `Submit as ${role === 'client' ? 'Client' : 'Freelancer'}` : 'Only a bound party can submit'}
+          <button type="submit" className="secondary" disabled={!actions.canSubmit}>
+            {status === 'pending' || pending.length ? 'Confirming on Studionet...' : role ? `Submit as ${role === 'client' ? 'Client' : 'Freelancer'}` : 'Only a bound party can submit'}
           </button>
         </div>
       </form>
@@ -264,9 +313,7 @@ export default function SubmitEvidencePage() {
                 <span>{item.type}</span>
                 <h4>{item.title}</h4>
                 <p>{item.summary}</p>
-                <p><strong>Submitter:</strong> {item.submittingWallet}</p>
-                <p><strong>SHA-256:</strong> {item.evidenceSha256}</p>
-                <p><a href={item.url} target="_blank" rel="noreferrer">Open validator-fetched evidence</a></p>
+                <EvidenceDetails item={item} />
               </div>
               <span className={`badge ${item.role === 'client' ? 'document' : 'evidence'}`}>
                 {item.role === 'client' ? 'Client' : 'Freelancer'}
@@ -277,20 +324,24 @@ export default function SubmitEvidencePage() {
       )}
 
       <div>
+        <p>Freeze only after both parties have finished submitting evidence. Freezing is permanent and requires at least one item from each party.</p>
+        <button type="button" className="secondary" disabled={!actions.canFreeze} onClick={() => handleLifecycle('freeze')}>Freeze evidence permanently</button>
         <button
           type="button"
           className="primary"
-          disabled={status === 'pending' || !role || clientCount === 0 || freelancerCount === 0}
+          disabled={!actions.canEvaluate}
           onClick={handleEvaluate}
         >
-          {status === 'pending' ? 'Waiting for Bradbury...' : 'Evaluate verified evidence'}
+          {status === 'pending' || pending.length ? 'Confirming on Studionet...' : 'Evaluate verified evidence'}
         </button>
       </div>
+
+      {caseData?.status === 'evaluated' && <Link href={`/dispute/${encodeURIComponent(caseData.id)}`}>View final verdict, material findings and explanation</Link>}
 
       {(status === 'idle' || status === 'success' || status === 'pending') && message && (
         <div className="notice"><p>{message}</p></div>
       )}
-      {status === 'error' && (
+      {status === 'error' && pending.length === 0 && (
         <div className="notice error-text">
           <h3>Action failed</h3>
           <ul>{errors.map((error) => <li key={error}>{error}</li>)}</ul>

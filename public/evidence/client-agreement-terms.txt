@@ -1,0 +1,7 @@
+CLIENT AGREEMENT TERMS - TEST EVIDENCE
+Case: Website delivery dispute
+Project fee: 500 GEN.
+Agreed scope: 5 responsive pages (Home, About, Services, Portfolio, Contact), mobile navigation, working contact form, and final deployment.
+Acceptance rule: Full payment is due only when all agreed scope items are delivered. If the project is handed off incomplete, payment should be allocated proportionally to the completed and usable scope.
+Client position: At handoff, Home, About, and Services were present. Portfolio and Contact were missing, and the contact form and final deployment were not completed.
+Requested resolution: Compare the agreed scope with the freelancer delivery-status evidence and determine a fair proportional payment allocation.

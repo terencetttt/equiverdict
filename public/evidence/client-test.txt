@@ -1,0 +1,4 @@
+CLIENT TEST EVIDENCE
+Case: Website delivery dispute
+Statement: The freelancer agreed to deliver a complete responsive website. The client states that several agreed features were missing from the final delivery.
+Requested resolution: Review the delivered work against the agreed scope and determine an appropriate payment allocation.

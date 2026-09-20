@@ -6,7 +6,7 @@ import {
   NO_WALLET_MESSAGE,
   WalletProvider,
   discoverWallets,
-  ensureBradburyNetwork,
+  ensureStudionetNetwork,
   setSelectedWalletProvider,
 } from '../lib/wallet'
 import { formatTransactionError } from '../lib/genlayer'
@@ -21,7 +21,7 @@ const chainNames: Record<string, string> = {
   '0xa4b1': 'Arbitrum One',
   '0x2105': 'Base',
   '0x539': 'Local Hardhat',
-  '0x107d': 'GenLayer Bradbury Testnet',
+  '0xf22f': 'GenLayer Studionet Testnet',
 }
 
 function formatAddress(address: string) {
@@ -74,7 +74,7 @@ export default function WalletNav() {
     try {
       const accounts = (await wallet.provider.request({ method: 'eth_requestAccounts' })) as string[]
       if (!accounts?.[0]) throw new Error('The wallet did not return an account.')
-      const connectedChainId = await ensureBradburyNetwork(wallet.provider)
+      const connectedChainId = await ensureStudionetNetwork(wallet.provider)
       setProvider(wallet.provider)
       setSelectedWalletProvider(wallet.provider)
       setAddress(accounts[0])

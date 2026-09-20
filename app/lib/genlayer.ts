@@ -1,22 +1,32 @@
+import { pollReceipt, ReceiptPollingError } from './receipt-polling'
+import { submitOnce, clearPending, pendingTransactions, markPendingTimeout, type PendingWrite } from './pending-writes'
+import { reconcileTransition, transitionObserved, type ExpectedTransition } from './reconciliation'
+import { publishState, subscribeState } from './state-events'
 import { createClient } from 'genlayer-js'
-import { testnetBradbury } from 'genlayer-js/chains'
+import { studionet } from 'genlayer-js/chains'
 import { CalldataAddress, ExecutionResult, TransactionStatus } from 'genlayer-js/types'
-import { DisputeDraft, EvidenceSubmission, mapContractDispute } from './cases'
+import { type DisputeDraft, type EvidenceSubmission, mapContractDispute } from './cases'
+import { canonicalAgreement } from './agreement'
+import { requireContractAddress } from './contract-config'
+import { disputeActions } from './lifecycle'
 import {
   CONSENSUS_UNDETERMINED_MESSAGE,
   classifyTransactionReceipt,
-  conciseExecutionError,
 } from './transaction-outcome'
 import {
-  BRADBURY_CHAIN_ID,
+  STUDIONET_CHAIN_ID,
   NO_WALLET_MESSAGE,
   discoverWallets,
-  ensureBradburyNetwork,
+  ensureStudionetNetwork,
   getSelectedWalletProvider,
   setSelectedWalletProvider,
 } from './wallet'
 
-export const CONTRACT_ADDRESS = '0x6dD436Fe2Cb40486f7D60Ca02161B05f90B319ce' as const
+export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_GENLAYER_CONTRACT_ADDRESS
+
+function contractAddress() {
+  return requireContractAddress(CONTRACT_ADDRESS)
+}
 
 function toCalldataAddress(address: `0x${string}`) {
   const hex = address.slice(2)
@@ -27,7 +37,7 @@ function toCalldataAddress(address: `0x${string}`) {
   return new CalldataAddress(bytes)
 }
 
-const readClient = createClient({ chain: testnetBradbury })
+const readClient = createClient({ chain: studionet })
 
 function errorText(value: unknown): string | null {
   if (typeof value === 'string' && value.trim()) return value.trim()
@@ -94,15 +104,15 @@ async function selectedWallet() {
   const address = accounts?.[0]
   if (!address) throw new Error('Connect a wallet account before continuing.')
 
-  const walletChainId = await ensureBradburyNetwork(provider)
-  if (walletChainId !== BRADBURY_CHAIN_ID) {
+  const walletChainId = await ensureStudionetNetwork(provider)
+  if (walletChainId !== STUDIONET_CHAIN_ID) {
     throw new Error(
-      `Wallet is on chain ${walletChainId}; GenLayer Bradbury requires ${BRADBURY_CHAIN_ID} (${testnetBradbury.id}).`,
+      `Wallet is on chain ${walletChainId}; GenLayer Studionet requires ${STUDIONET_CHAIN_ID} (${studionet.id}).`,
     )
   }
 
   const client = createClient({
-    chain: testnetBradbury,
+    chain: studionet,
     account: address as `0x${string}`,
     provider,
   })
@@ -110,69 +120,112 @@ async function selectedWallet() {
   return { provider, address, client }
 }
 
-async function assertMethod(functionName: string, expectedParams: string[]) {
-  const schema = await readClient.getContractSchema(CONTRACT_ADDRESS)
-  const method = schema.methods?.[functionName]
-  const actualParams = method?.params?.map(([name]) => name) ?? []
-  if (method?.readonly !== false || actualParams.join(',') !== expectedParams.join(',')) {
-    throw new Error(
-      `Contract schema mismatch at ${CONTRACT_ADDRESS} on Bradbury: ${functionName}(${actualParams.join(', ') || 'missing'}).`,
-    )
+const REQUIRED_METHODS: Record<string, { params: string[]; readonly: boolean }> = {
+  create_dispute: { params: ['case_id', 'freelancer_wallet', 'agreement', 'disputed_amount'], readonly: false },
+  accept_agreement: { params: ['case_id', 'agreement_sha256'], readonly: false },
+  submit_evidence: { params: ['case_id', 'evidence_type', 'title', 'description', 'importance', 'timestamp', 'evidence_uri', 'evidence_sha256', 'accepted_agreement_sha256'], readonly: false },
+  freeze_evidence: { params: ['case_id'], readonly: false },
+  evaluate_dispute: { params: ['case_id'], readonly: false },
+  get_dispute: { params: ['case_id'], readonly: true },
+  list_disputes: { params: [], readonly: true },
+}
+
+async function assertMethod(functionName: string, expectedParams: string[], readonly = false) {
+  const schema = await readClient.getContractSchema(contractAddress())
+  // Check the whole lifecycle before even creating a case on an older deployment.
+  for (const [name, expected] of Object.entries(REQUIRED_METHODS)) {
+    const method = schema.methods?.[name]
+    const actualParams = method?.params?.map(([parameter]) => parameter) ?? []
+    if (method?.readonly !== expected.readonly || actualParams.join(',') !== expected.params.join(',')) {
+      throw new Error(`Contract schema mismatch at ${CONTRACT_ADDRESS} on Studionet: ${name}(${actualParams.join(', ') || 'missing'}). Corrected deployment verification is required.`)
+    }
+  }
+  const expected = REQUIRED_METHODS[functionName]
+  if (!expected || expected.readonly !== readonly || expected.params.join(',') !== expectedParams.join(',')) {
+    throw new Error(`Frontend ABI mismatch for ${functionName}.`)
   }
 }
 
-type TransactionHash = Parameters<typeof readClient.waitForTransactionReceipt>[0]['hash']
-
-async function waitForWrite(hash: TransactionHash, allowUndetermined: boolean) {
-  let receipt = await readClient.waitForTransactionReceipt({
-    hash,
-    status: TransactionStatus.ACCEPTED,
-    interval: 3000,
-    retries: 100,
-  })
-
-  let outcome = classifyTransactionReceipt(receipt)
-  while (outcome === 'pending') {
-    receipt = await readClient.waitForTransactionReceipt({
-      hash,
-      status: TransactionStatus.ACCEPTED,
-      interval: 3000,
-      retries: 100,
-    })
-    outcome = classifyTransactionReceipt(receipt)
-  }
-
-  if (outcome === 'undetermined') {
-    if (allowUndetermined) throw new GenLayerConsensusError(String(hash))
-    throw new Error('The Bradbury transaction did not reach a determined execution result.')
-  }
-
-  if (outcome === 'execution_error') {
-    let executionError = 'Contract execution failed without a trace message.'
-    try {
-      const trace = await readClient.debugTraceTransaction({ hash })
-      executionError = conciseExecutionError(trace.stderr?.trim() || trace.stdout?.trim())
-    } catch {
-      executionError = 'The GenLayer contract transaction failed.'
+export async function waitForWrite(hash: string, allowUndetermined = false) {
+  const deadline = Date.now() + 300000
+  for (let attempt = 0; attempt < 100 && Date.now() < deadline; attempt++) {
+    const { receipt, executionError } = await pollReceipt(String(hash), TransactionStatus.ACCEPTED)
+    const outcome = classifyTransactionReceipt(receipt)
+    if (outcome === 'pending') {
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      continue
     }
-    throw new GenLayerExecutionError(
-      'Bradbury accepted the transaction, but contract execution failed.',
-      String(hash),
-      String(receipt.statusName ?? receipt.status ?? 'unknown'),
-      executionError,
-    )
+    if (outcome === 'undetermined') {
+      if (allowUndetermined) throw new GenLayerConsensusError(String(hash))
+      throw new Error('The Studionet transaction did not reach a determined execution result.')
+    }
+    if (outcome === 'execution_error') {
+      throw new GenLayerExecutionError(
+        'Studionet accepted the transaction, but contract execution failed.', String(hash),
+        String(receipt.statusName ?? receipt.status ?? 'unknown'),
+        executionError || 'The GenLayer contract transaction failed.',
+      )
+    }
+    if (outcome !== 'success' || receipt.txExecutionResultName !== ExecutionResult.FINISHED_WITH_RETURN) {
+      throw new ReceiptPollingError(String(hash), 'Transaction result is not confirmed')
+    }
+    return receipt
   }
+  throw new ReceiptPollingError(String(hash), 'Receipt polling timed out')
+}
 
-  if (outcome !== 'success' || receipt.txExecutionResultName !== ExecutionResult.FINISHED_WITH_RETURN) {
-    throw new Error('The GenLayer transaction did not complete successfully.')
-  }
+const confirmations = new Map<string, Promise<ReturnType<typeof mapContractDispute>>>()
 
-  return receipt
+export function recoverPendingTransaction(transaction: PendingWrite) {
+  const existing = confirmations.get(transaction.hash)
+  if (existing) return existing
+  const work = (async () => {
+    const expected = transaction.expected ?? { method: transaction.method, caseId: transaction.caseId, account: transaction.account }
+    markPendingTimeout(transaction.hash, false)
+    const controller = new AbortController()
+    let unsubscribe = () => {}
+    const observedElsewhere = new Promise<ReturnType<typeof mapContractDispute>>(resolve => {
+      unsubscribe = subscribeState(event => {
+        if (event.type === 'confirmed' && event.hash === transaction.hash && event.record) resolve(event.record)
+      })
+    })
+    try {
+      // Older evidence hashes lack a baseline. Keep their receipt check, then refresh state.
+      if (!transaction.expected && transaction.method === 'submit_evidence') await waitForWrite(transaction.hash)
+      const record = !transaction.expected && transaction.method === 'submit_evidence'
+        ? await getDispute(transaction.caseId)
+        : await Promise.race([observedElsewhere, reconcileTransition({ hash: transaction.hash, expected, read: () => getDispute(transaction.caseId),
+          signal: controller.signal,
+          observeReceipt: () => pollReceipt(transaction.hash, TransactionStatus.ACCEPTED),
+          attempts: transaction.method === 'evaluate_dispute' ? 150 : 60,
+          timeoutMs: transaction.method === 'evaluate_dispute' ? 300000 : 180000 })])
+      if (pendingTransactions().some(tx => tx.hash === transaction.hash)) {
+        clearPending(transaction.hash)
+        publishState({ type: 'confirmed', caseId: transaction.caseId, method: transaction.method, hash: transaction.hash, record })
+      }
+      return record
+    } catch (error) {
+      markPendingTimeout(transaction.hash)
+      throw error
+    } finally { unsubscribe(); controller.abort() }
+  })()
+  confirmations.set(transaction.hash, work)
+  void work.finally(() => confirmations.delete(transaction.hash)).catch(() => undefined)
+  return work
+}
+
+async function submitWrite(client: Awaited<ReturnType<typeof selectedWallet>>['client'], call: Parameters<typeof client.writeContract>[0], expected: ExpectedTransition) {
+  const key = JSON.stringify([CONTRACT_ADDRESS, client.account?.address, call.functionName, call.args?.[0]])
+  const hash = await submitOnce(key, () => client.writeContract(call), expected)
+  const transaction = pendingTransactions().find(item => item.hash === hash && item.caseId === expected.caseId)
+  const record = await recoverPendingTransaction(transaction ?? { hash, contract: contractAddress(), account: expected.account, method: expected.method, caseId: expected.caseId, expected })
+  return { hash: String(hash), record }
 }
 
 export async function listDisputes() {
+  await assertMethod('list_disputes', [], true)
   const result = await readClient.readContract({
-    address: CONTRACT_ADDRESS,
+    address: contractAddress(),
     functionName: 'list_disputes',
     args: [],
   })
@@ -180,12 +233,21 @@ export async function listDisputes() {
 }
 
 export async function getDispute(caseId: string) {
+  await assertMethod('get_dispute', ['case_id'], true)
   const result = await readClient.readContract({
-    address: CONTRACT_ADDRESS,
+    address: contractAddress(),
     functionName: 'get_dispute',
     args: [caseId],
   })
-  return mapContractDispute(result)
+  const record = mapContractDispute(result)
+  // Background/focus reads can prove success even after the automatic deadline.
+  for (const tx of pendingTransactions()) {
+    if (tx.contract === CONTRACT_ADDRESS && tx.expected && transitionObserved(record, tx.expected)) {
+      clearPending(tx.hash)
+      publishState({ type: 'confirmed', caseId, method: tx.method, hash: tx.hash, record })
+    }
+  }
+  return record
 }
 
 export async function getConnectedWalletAddress() {
@@ -193,8 +255,12 @@ export async function getConnectedWalletAddress() {
   return address
 }
 
-export async function createDispute(draft: DisputeDraft) {
+export async function createDispute(draft: DisputeDraft, expectedClientWallet: string) {
+  contractAddress()
   const { address, client } = await selectedWallet()
+
+  if (address.toLowerCase() !== expectedClientWallet.toLowerCase()) throw new Error('Client wallet changed. Refresh the wallet and review the agreement before creating the case.')
+  if (!draft.terms.trim()) throw new Error('Agreement terms are required.')
 
   if (!/^0x[0-9a-fA-F]{40}$/.test(draft.freelancerWallet)) {
     throw new Error('Enter a valid freelancer wallet address.')
@@ -210,24 +276,26 @@ export async function createDispute(draft: DisputeDraft) {
     'disputed_amount',
   ])
 
-  const hash = await client.writeContract({
-    address: CONTRACT_ADDRESS,
+  const result = await submitWrite(client, {
+    address: contractAddress(),
     functionName: 'create_dispute',
     args: [
       draft.caseId,
       toCalldataAddress(draft.freelancerWallet as `0x${string}`),
-      JSON.stringify(draft),
+      canonicalAgreement(draft, address),
       draft.amount,
     ],
     value: BigInt(0),
-  })
-
-  await waitForWrite(hash, false)
-  return { hash: String(hash), caseId: draft.caseId, clientWallet: address }
+  }, { method: 'create_dispute', caseId: draft.caseId, account: address, agreement: canonicalAgreement(draft, address) })
+  return { ...result, caseId: draft.caseId, clientWallet: address }
 }
 
 export async function submitEvidence(caseId: string, evidence: EvidenceSubmission) {
-  const { client } = await selectedWallet()
+  contractAddress()
+  const { client, address } = await selectedWallet()
+  const record = await getDispute(caseId)
+  if (!disputeActions(record, address).canSubmit) throw new Error('Evidence requires a bound party, mutual agreement acceptance, and an unfrozen case.')
+  if (evidence.acceptedAgreementSha256 !== record.agreementSha256) throw new Error('Evidence must reference the mutually accepted agreement hash.')
 
   if (!evidence.url.startsWith('https://')) {
     throw new Error('Evidence URL must use HTTPS.')
@@ -245,10 +313,11 @@ export async function submitEvidence(caseId: string, evidence: EvidenceSubmissio
     'timestamp',
     'evidence_uri',
     'evidence_sha256',
+    'accepted_agreement_sha256',
   ])
 
-  const hash = await client.writeContract({
-    address: CONTRACT_ADDRESS,
+  const result = await submitWrite(client, {
+    address: contractAddress(),
     functionName: 'submit_evidence',
     args: [
       caseId,
@@ -259,58 +328,49 @@ export async function submitEvidence(caseId: string, evidence: EvidenceSubmissio
       evidence.timestamp,
       evidence.url,
       evidence.evidenceSha256.toLowerCase(),
+      evidence.acceptedAgreementSha256,
     ],
     value: BigInt(0),
-  })
+  }, { method: 'submit_evidence', caseId, account: address, agreementHash: record.agreementSha256,
+    evidence, previousEvidenceIds: record.evidence.map(item => item.id) })
+  return { ...result, caseId }
+}
 
-  await waitForWrite(hash, false)
-  return { hash: String(hash), caseId }
+export async function acceptAgreement(caseId: string, agreementHash: string) {
+  contractAddress()
+  const { client, address } = await selectedWallet()
+  const record = await getDispute(caseId)
+  if (!disputeActions(record, address).canAccept || agreementHash !== record.agreementSha256) throw new Error('Only an unaccepted bound party can accept this exact agreement.')
+  await assertMethod('accept_agreement', ['case_id', 'agreement_sha256'])
+  const result = await submitWrite(client, {
+    address: contractAddress(), functionName: 'accept_agreement', args: [caseId, agreementHash], value: BigInt(0),
+  }, { method: 'accept_agreement', caseId, account: address, agreementHash,
+    otherAccepted: address.toLowerCase() === record.clientWallet.toLowerCase() ? record.freelancerAgreementAccepted : record.clientAgreementAccepted })
+  return { ...result, caseId }
+}
+
+export async function freezeEvidence(caseId: string) {
+  contractAddress()
+  const { client, address } = await selectedWallet()
+  if (!disputeActions(await getDispute(caseId), address).canFreeze) throw new Error('Freezing requires mutual acceptance and evidence from both parties in an unfrozen case.')
+  await assertMethod('freeze_evidence', ['case_id'])
+  const result = await submitWrite(client, {
+    address: contractAddress(), functionName: 'freeze_evidence', args: [caseId], value: BigInt(0),
+  }, { method: 'freeze_evidence', caseId, account: address })
+  return { ...result, caseId }
 }
 
 export async function evaluateDispute(caseId: string) {
-  const { client } = await selectedWallet()
+  contractAddress()
+  const { client, address } = await selectedWallet()
+  if (!disputeActions(await getDispute(caseId), address).canEvaluate) throw new Error('Evaluation requires frozen evidence and a bound party.')
   await assertMethod('evaluate_dispute', ['case_id'])
 
-  const hash = await client.writeContract({
-    address: CONTRACT_ADDRESS,
+  const result = await submitWrite(client, {
+    address: contractAddress(),
     functionName: 'evaluate_dispute',
     args: [caseId],
     value: BigInt(0),
-  })
-
-  await waitForWrite(hash, true)
-
-  // Bradbury may expose an ACCEPTED receipt before validator consensus is
-  // actually final. Do not report success or let the UI clear the draft
-  // until the contract state itself proves that evaluation was committed.
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    const chainCase = await getDispute(caseId)
-    if (chainCase.status === 'evaluated') {
-      return { hash: String(hash), caseId }
-    }
-
-    try {
-      const tx = await readClient.getTransaction({ hash })
-      const txRecord = tx as unknown as Record<string, unknown>
-      const finalityText = [
-        txRecord.statusName,
-        txRecord.status,
-        txRecord.resultName,
-        txRecord.result,
-      ].map((value) => String(value ?? '')).join(' ')
-
-      if (/undetermined/i.test(finalityText)) {
-        throw new GenLayerConsensusError(String(hash))
-      }
-    } catch (error) {
-      if (error instanceof GenLayerConsensusError) throw error
-      // A temporary transaction-read failure must not be treated as success.
-    }
-
-    await new Promise((resolve) => window.setTimeout(resolve, 3000))
-  }
-
-  // If Bradbury never commits `evaluated`, preserve the dispute draft and
-  // surface an unresolved-consensus result instead of navigating to 0/0.
-  throw new GenLayerConsensusError(String(hash))
+  }, { method: 'evaluate_dispute', caseId, account: address })
+  return { ...result, caseId }
 }

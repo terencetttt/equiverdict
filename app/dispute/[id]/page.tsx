@@ -1,10 +1,10 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use } from 'react'
 import Link from 'next/link'
-import { DisputeCase } from '../../lib/cases'
-import { getDispute } from '../../lib/genlayer'
-import { isCaseNotFoundError } from '../../lib/transaction-outcome'
+import { AgreementDetails, EvidenceDetails, MaterialFindings } from '../../components/DisputeRecords'
+import { useLiveDispute } from '../../lib/use-live-state'
+import PendingTransactions from '../../components/PendingTransactions'
 
 function short(address: string) {
   return address ? `${address.slice(0, 8)}...${address.slice(-6)}` : 'Not recorded'
@@ -12,22 +12,14 @@ function short(address: string) {
 
 export default function DisputeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const [loading, setLoading] = useState(true)
-  const [caseData, setCaseData] = useState<DisputeCase | null>(null)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    getDispute(decodeURIComponent(id))
-      .then(setCaseData)
-      .catch((err) => setError(isCaseNotFoundError(err) ? 'Case not found' : 'Unable to load this dispute right now.'))
-      .finally(() => setLoading(false))
-  }, [id])
+  const live = useLiveDispute(decodeURIComponent(id))
+  const { loading, caseData, error } = live
 
   if (loading) {
-    return <section className="panel"><div className="notice"><h3>Loading case details...</h3><p>Reading the latest dispute from Bradbury.</p></div></section>
+    return <section className="panel"><div className="notice"><h3>Loading case details...</h3><p>Reading the latest dispute from Studionet.</p></div></section>
   }
   if (!caseData) {
-    return <section className="panel"><div className="notice error-text"><h3>Case not found</h3><p>{error || 'Check the case ID and try again.'}</p><Link href="/dashboard"><button className="secondary">Back to dashboard</button></Link></div></section>
+    return <section className="panel"><div className="notice error-text"><h3>Case not found</h3><p>{error || 'Checking Studionet automatically.'}</p><Link href="/dashboard"><button className="secondary">Back to dashboard</button></Link></div></section>
   }
 
   const verdict = caseData.verdict
@@ -39,8 +31,9 @@ export default function DisputeDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <section className="panel">
+      <PendingTransactions caseId={caseData.id} refreshToken="idle" onRecovered={() => live.refresh()} />
       <div className="heading-row">
-        <div><p className="eyebrow">Case details · GenLayer Bradbury</p><h2>{caseData.title}</h2></div>
+        <div><p className="eyebrow">Case details · GenLayer Studionet</p><h2>{caseData.title}</h2></div>
         <div><span className="status-pill">{caseData.status}</span></div>
       </div>
 
@@ -61,21 +54,25 @@ export default function DisputeDetailPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      <div className="panel soft-panel">
+      <AgreementDetails record={caseData} />
+      {caseData.status !== 'evaluated' && <div className="notice"><p>No final verdict yet.</p><Link href={`/dispute/submit?case=${encodeURIComponent(caseData.id)}`}>Accept agreement, submit evidence or freeze and evaluate</Link></div>}
+
+      {caseData.status === 'evaluated' && <div className="panel soft-panel">
         <div className="heading-row">
           <div><p className="eyebrow">Ruling</p><h2>Verdict and payment split</h2></div>
           <Link href={`/ruling?case=${encodeURIComponent(caseData.id)}`}><button className="secondary">View ruling page</button></Link>
         </div>
         <div className="result-grid">
-          <article className="result-card client"><p>Verdict</p><h3>{verdict.decisionLabel}</h3><p>{verdict.recommendedNextStep}</p></article>
+          <article className="result-card client"><p>Verdict</p><h3>{verdict.decisionLabel}</h3><p><strong>Outcome:</strong> {verdict.outcome}</p><p><strong>Next step:</strong> {verdict.recommendedNextStep}</p></article>
           <article className="result-card confidence"><p>Confidence</p><strong>{verdict.confidenceScore}%</strong></article><article className="result-card"><p>Payment split</p><strong>{verdict.paymentSplit.client}% Client / {verdict.paymentSplit.freelancer}% Freelancer</strong></article>
         </div>
+        <MaterialFindings verdict={verdict} />
         <div className="reasoning">
           <h3>Validator reasoning</h3>
           <p>Consensus is based on validator-fetched evidence whose response bytes were SHA-256 verified before evaluation.</p>
           <ul>{verdict.explanation.map((item) => <li key={item}>{item}</li>)}</ul>
         </div>
-      </div>
+      </div>}
 
       <div className="panel">
         <div className="heading-row">
@@ -88,11 +85,7 @@ export default function DisputeDetailPage({ params }: { params: Promise<{ id: st
                 <span>{item.type}</span>
                 <h4>{item.title}</h4>
                 <p>{item.summary}</p>
-                <p><strong>Role derived from wallet:</strong> {item.role === 'client' ? 'Client' : 'Freelancer'}</p>
-                <p><strong>Evidence submitter wallet:</strong> {item.submittingWallet}</p>
-                <p><strong>SHA-256:</strong> {item.evidenceSha256}</p>
-                <p><a href={item.url} target="_blank" rel="noreferrer">Open evidence</a></p>
-                <p><strong>Verification:</strong> Validator-fetched evidence</p>
+                <EvidenceDetails item={item} />
               </div>
               <span className={`badge ${item.role === 'client' ? 'document' : 'evidence'}`}>
                 {item.role === 'client' ? 'Client' : 'Freelancer'}

@@ -1,4 +1,5 @@
-import { testnetBradbury } from 'genlayer-js/chains'
+import { publishState } from './state-events'
+import { studionet } from 'genlayer-js/chains'
 
 export type WalletProvider = {
   request: (args: { method: string; params?: unknown[] | Record<string, unknown> }) => Promise<unknown>
@@ -18,13 +19,15 @@ type Eip6963ProviderDetail = {
   provider?: WalletProvider
 }
 
-export const BRADBURY_CHAIN_ID = `0x${testnetBradbury.id.toString(16)}`
+export const STUDIONET_CHAIN_ID = `0x${studionet.id.toString(16)}`
 export const NO_WALLET_MESSAGE = 'No compatible wallet detected. Install an EVM-compatible wallet to continue.'
 
 let selectedProvider: WalletProvider | null = null
 
 export function setSelectedWalletProvider(provider: WalletProvider | null) {
+  if (selectedProvider === provider) return
   selectedProvider = provider
+  publishState({ type: 'wallet' })
 }
 
 export function getSelectedWalletProvider() {
@@ -70,38 +73,56 @@ function errorCode(error: unknown): number | undefined {
   return errorCode(record.error) ?? errorCode(record.cause)
 }
 
-export async function ensureBradburyNetwork(provider: WalletProvider) {
+export async function ensureStudionetNetwork(provider: WalletProvider) {
   const currentChainId = String(await provider.request({ method: 'eth_chainId' })).toLowerCase()
-  if (currentChainId === BRADBURY_CHAIN_ID) return currentChainId
+  if (currentChainId === STUDIONET_CHAIN_ID) return currentChainId
 
   try {
     await provider.request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: BRADBURY_CHAIN_ID }],
+      params: [{ chainId: STUDIONET_CHAIN_ID }],
     })
   } catch (error) {
     if (errorCode(error) !== 4902) throw error
     await provider.request({
       method: 'wallet_addEthereumChain',
       params: [{
-        chainId: BRADBURY_CHAIN_ID,
-        chainName: testnetBradbury.name,
-        rpcUrls: [...testnetBradbury.rpcUrls.default.http],
-        nativeCurrency: testnetBradbury.nativeCurrency,
-        blockExplorerUrls: testnetBradbury.blockExplorers?.default.url
-          ? [testnetBradbury.blockExplorers.default.url]
+        chainId: STUDIONET_CHAIN_ID,
+        chainName: studionet.name,
+        rpcUrls: [...studionet.rpcUrls.default.http],
+        nativeCurrency: studionet.nativeCurrency,
+        blockExplorerUrls: studionet.blockExplorers?.default.url
+          ? [studionet.blockExplorers.default.url]
           : [],
       }],
     })
     await provider.request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: BRADBURY_CHAIN_ID }],
+      params: [{ chainId: STUDIONET_CHAIN_ID }],
     })
   }
 
   const switchedChainId = String(await provider.request({ method: 'eth_chainId' })).toLowerCase()
-  if (switchedChainId !== BRADBURY_CHAIN_ID) {
-    throw new Error(`Wallet is on chain ${switchedChainId}; GenLayer Bradbury requires ${BRADBURY_CHAIN_ID}.`)
+  if (switchedChainId !== STUDIONET_CHAIN_ID) {
+    throw new Error(`Wallet is on chain ${switchedChainId}; GenLayer Studionet requires ${STUDIONET_CHAIN_ID}.`)
   }
   return switchedChainId
+}
+
+// Passive refresh must never open Rabby or request a network switch.
+export async function getWalletAddress() {
+  let provider = getSelectedWalletProvider()
+  if (!provider) {
+    const wallets = await discoverWallets()
+    const preferred = wallets.find(wallet => /rabby/i.test(wallet.name)) ?? wallets[0]
+    if (!preferred) return ''
+    provider = getSelectedWalletProvider() ?? preferred.provider
+    const accounts = await provider.request({ method: 'eth_accounts' })
+    if (!Array.isArray(accounts) || !accounts.length) return ''
+    setSelectedWalletProvider(provider)
+  }
+  const [accounts, chain] = await Promise.all([
+    provider.request({ method: 'eth_accounts' }), provider.request({ method: 'eth_chainId' }),
+  ])
+  return String(chain).toLowerCase() === STUDIONET_CHAIN_ID && Array.isArray(accounts) ? String(accounts[0] ?? '') : ''
 }

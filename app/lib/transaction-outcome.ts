@@ -1,5 +1,5 @@
 export const CONSENSUS_UNDETERMINED_MESSAGE =
-  'Validators could not reach consensus on this dispute. Add clearer evidence or agreement terms and try again.'
+  'Validators could not reach consensus on this dispute. The frozen evidence is unchanged. Retry evaluation, or create a new case if agreement terms or evidence need to change.'
 
 type ReceiptLike = {
   status?: unknown

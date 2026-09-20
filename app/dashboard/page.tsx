@@ -1,21 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useCallback } from 'react'
 import { DisputeCase } from '../lib/cases'
 import { listDisputes } from '../lib/genlayer'
+import { useLiveResource } from '../lib/use-live-state'
+const EMPTY_CASES: DisputeCase[] = []
 
 export default function DashboardPage() {
-  const [cases, setCases] = useState<DisputeCase[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    listDisputes()
-      .then(setCases)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load disputes.'))
-      .finally(() => setLoading(false))
-  }, [])
+  const load = useCallback(() => listDisputes(), [])
+  const { data: cases, loading, error } = useLiveResource('dashboard', load, EMPTY_CASES)
 
   const resolved = cases.filter((item) => item.status === 'evaluated')
   const averageConfidence = resolved.length
@@ -34,7 +28,7 @@ export default function DashboardPage() {
         <div className="summary-card"><p>Average confidence</p><strong>{averageConfidence}%</strong></div>
       </div>
       {loading ? (
-        <div className="notice"><h3>Loading Bradbury disputes…</h3><p>Reading the latest contract state.</p></div>
+        <div className="notice"><h3>Loading Studionet disputes…</h3><p>Reading the latest contract state.</p></div>
       ) : error ? (
         <div className="notice error-text"><h3>Unable to load disputes</h3><p>{error}</p></div>
       ) : cases.length === 0 ? (
